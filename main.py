@@ -1,6 +1,5 @@
 import random
 import time
-from collections import deque # Para BFS, operações de fila (FIFO)
 
 class Labirinto:
     def __init__(self, n, num_paredes): 
@@ -64,14 +63,15 @@ class Labirinto:
 # --- Algoritmos de Busca ---
 
 def busca_largura(labirinto):
-    # Visualiza todos os vizinhos simultaneamente e marca os nós visitados(visitados) para evitar ciclos
+    # Visualiza todos os caminhos possíveis simultaneamente
     inicio_t = time.time()
-    fronteira = deque([labirinto.origem]) # FIFO para BFS
+    fronteira = [labirinto.origem] 
     visitados = {labirinto.origem: None}
     nos_expandidos = 0
 
     while fronteira:
-        no_atual = fronteira.popleft()
+        # FIFO: pop(0) para remover o primeiro elemento da lista
+        no_atual = fronteira.pop(0) 
         nos_expandidos += 1
 
         # Teste de objetivo
