@@ -1,4 +1,5 @@
 import random
+import heapq
 import time
 
 class Labirinto:
@@ -111,7 +112,83 @@ def busca_profundidade(labirinto):
                 
     return None, nos_expandidos, 0
 
+def busca_gulosa(labirinto):
+    inicio_t = time.time()
+    # A fila de prioridade armazena: (valor_da_heuristica, no_atual)
+    # A Gulosa expande sempre o nó com a menor HEURÍSTICA.
+    # Ela ignora o custo do terreno (lama/grama) já percorrido.
+    # O heapq sempre retira o que tiver o menor valor de prioridade primeiro
+    fronteira = []
+    heapq.heappush(fronteira, (heuristica(labirinto.origem, labirinto.destino), labirinto.origem))
+    
+    visitados = {labirinto.origem: None}
+    nos_expandidos = 0
+
+    while fronteira:
+        # O '_' ignora o valor da heurística, pegamos apenas a posição do nó
+        _, no_atual = heapq.heappop(fronteira)
+        nos_expandidos += 1
+
+        if no_atual == labirinto.destino:
+            tempo_ms = (time.time() - inicio_t) * 1000
+            return reconstruir_caminho(visitados, no_atual), nos_expandidos, tempo_ms
+
+        for sucessor in labirinto.obter_sucessores(no_atual):
+            if sucessor not in visitados:
+                visitados[sucessor] = no_atual
+                prioridade = heuristica(sucessor, labirinto.destino)
+                heapq.heappush(fronteira, (prioridade, sucessor))
+                
+    return None, nos_expandidos, 0
+
+def busca_a_estrela(labirinto):
+    inicio_t = time.time()
+    # A fila de prioridade armazena: (f_score, no_atual)
+    # f(n) = g(n) + h(n)
+    # g(n): Custo real acumulado do ponto de partida até aqui.
+    # h(n): Estimativa (heurística) daqui até o objetivo.
+    fronteira = []
+    # No início, g é 0, então f = h
+    h_inicial = heuristica(labirinto.origem, labirinto.destino)
+    heapq.heappush(fronteira, (h_inicial, labirinto.origem))
+    
+    visitados = {labirinto.origem: None}
+    # g_score armazena o custo real acumulado para chegar em cada nó
+    g_score = {labirinto.origem: 0}
+    nos_expandidos = 0
+
+    while fronteira:
+        _, no_atual = heapq.heappop(fronteira)
+        nos_expandidos += 1
+
+        if no_atual == labirinto.destino:
+            tempo_ms = (time.time() - inicio_t) * 1000
+            return reconstruir_caminho(visitados, no_atual), nos_expandidos, tempo_ms
+
+        for sucessor in labirinto.obter_sucessores(no_atual):
+            # Calcula o custo real somando o peso do terreno definido no mapa.
+            #Foi definido: 5 para lama, senão 1 (grama)
+            custo_terreno = 5 if labirinto.matriz[sucessor[0]][sucessor[1]] == 5 else 1
+            novo_g = g_score[no_atual] + custo_terreno
+            
+            # O A* só atualiza o caminho se encontrar uma rota MAIS BARATA (menor g).
+            if sucessor not in g_score or novo_g < g_score[sucessor]:
+                g_score[sucessor] = novo_g
+                visitados[sucessor] = no_atual
+                f_score = novo_g + heuristica(sucessor, labirinto.destino)
+                heapq.heappush(fronteira, (f_score, sucessor))
+                
+    return None, nos_expandidos, 0
+
+
 # --- Utilitários de Análise ---
+
+def heuristica(a, b):
+    # Calcula a distância de Manhattan entre o ponto 'a' e o ponto 'b'
+    # é permitido apenas em 4 direções (cima, baixo, esquerda, direita).
+    (x1, y1) = a
+    (x2, y2) = b
+    return abs(x1 - x2) + abs(y1 - y2)
 
 def reconstruir_caminho(parentes, atual):
     # Volta e tenta de novo da busca_profundidade 
@@ -173,7 +250,9 @@ def main():
 
     estrategias = [
         ("Busca em Largura", busca_largura),
-        ("Busca em Profundidade", busca_profundidade)
+        ("Busca em Profundidade", busca_profundidade),
+        ("Busca Gulosa", busca_gulosa),
+        ("Busca A*", busca_a_estrela)
     ]
 
     for nome, algoritmo in estrategias:
@@ -196,3 +275,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    #print(heuristica((0,0), (3,3)))
