@@ -1,9 +1,10 @@
 import random
 import time
-from collections import deque
+from collections import deque # Para BFS, operações de fila (FIFO)
 
 class Labirinto:
-    def __init__(self, n, num_paredes):
+    def __init__(self, n, num_paredes): 
+        # n = tamanho do mapa, num_paredes = quantidade de paredes a serem colocadas definidas pelo usuário
         self.n = n
         self.origem = (0, 0)
         self.destino = (n - 1, n - 1)
@@ -17,23 +18,23 @@ class Labirinto:
         1 = Parede (Intransponível)
         """
         matriz = [[random.choice([0, 5]) for _ in range(self.n)] for _ in range(self.n)]
-        
+        # Coloca os obstáculos 0 (grama) e 5 (lama) aleatoriamente, para definir a dificuldade do mapa.
         paredes_colocadas = 0
         tentativas = 0
-        while paredes_colocadas < num_paredes and tentativas < (self.n * self.n):
+        while paredes_colocadas < num_paredes and tentativas < (self.n * self.n): 
             r, c = random.randint(0, self.n - 1), random.randint(0, self.n - 1)
             if (r, c) != self.origem and (r, c) != self.destino and matriz[r][c] != 1:
-                matriz[r][c] = 1
-                paredes_colocadas += 1
+                matriz[r][c] = 1 # Coloca uma parede
+                paredes_colocadas += 1 # Conta até que se alcance o número inserido de paredes
             tentativas += 1
         
-        # Garante que os pontos A e B sejam passáveis
+        # Garante que os pontos A e B sejam "passáveis"
         matriz[self.origem[0]][self.origem[1]] = 0
         matriz[self.destino[0]][self.destino[1]] = 0
         return matriz
 
-    def visualizar(self, caminho=None, titulo="Mapa"):
-        """ Traduz a matriz numérica para caracteres visuais """
+    def visualizar(self, caminho=None, titulo="Mapa"): 
+        # Visualiza o labirinto no console, destacando o caminho encontrado (se houver) e os obstáculos.
         caminho_set = set(caminho) if caminho else set()
         print(f"\n--- {titulo} ---")
         for r in range(self.n):
@@ -43,14 +44,15 @@ class Labirinto:
                 val = self.matriz[r][c]
                 if pos == self.origem: linha += " A "
                 elif pos == self.destino: linha += " B "
-                elif pos in caminho_set: linha += " . "
+                elif pos in caminho_set: linha += " o "
                 elif val == 1: linha += " | "
-                elif val == 5: linha += " ~ "
+                elif val == 5: linha += " ^ "
                 else: linha += " _ "
             print(linha)
-        print("Legenda: A (Início), B (Fim), | (Parede), ~ (Lama/Custo 5), _ (Grama/Custo 1), . (Caminho)")
+        print("Legenda: A (Início), B (Fim), | (Parede), ^ (Lama/Custo 5), _ (Grama/Custo 1), o (Caminho)")
 
     def obter_sucessores(self, pos):
+        # Posicionamento atual e retorna os sucessores válidos
         r, c = pos
         sucessores = []
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -62,6 +64,7 @@ class Labirinto:
 # --- Algoritmos de Busca ---
 
 def busca_largura(labirinto):
+    # Visualiza todos os vizinhos simultaneamente e marca os nós visitados(visitados) para evitar ciclos
     inicio_t = time.time()
     fronteira = deque([labirinto.origem]) # FIFO para BFS
     visitados = {labirinto.origem: None}
@@ -85,6 +88,7 @@ def busca_largura(labirinto):
     return None, nos_expandidos, 0
 
 def busca_profundidade(labirinto):
+    # Escolhe um caminho e segue "reto toda vida" até chegar a um beco sem saída, então volta e tenta de novo
     inicio_t = time.time()
     fronteira = [labirinto.origem] # LIFO para DFS
     visitados = {labirinto.origem: None}
@@ -110,6 +114,7 @@ def busca_profundidade(labirinto):
 # --- Utilitários de Análise ---
 
 def reconstruir_caminho(parentes, atual):
+    # Volta e tenta de novo da busca_profundidade 
     caminho = []
     while atual is not None:
         caminho.append(atual)
@@ -117,11 +122,13 @@ def reconstruir_caminho(parentes, atual):
     return caminho[::-1]
 
 def calcular_custo(labirinto, caminho):
+    # Verifica cada posição encontrada e soma o custo conforme os obstáculos ou caminho livre
     if not caminho: return float('inf')
     # Custo 1 para grama (0) e custo 5 para lama (5)
     return sum(5 if labirinto.matriz[r][c] == 5 else 1 for r, c in caminho)
 
 def exibir_melhor_caminho(resultados):
+    # Compara e exibe o melhor 
     if not resultados:
         print("\nNenhum caminho foi encontrado por nenhum algoritmo.")
         return
