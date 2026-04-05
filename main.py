@@ -1,278 +1,359 @@
 import random
 import heapq
 import time
+import os
+
+# Códigos ANSI para colorir o terminal
+AZUL    = "\033[94m"
+VERMELHO = "\033[91m"
+RESET   = "\033[0m"
+CINZA   = "\033[90m"
+AMARELO = "\033[93m"
+VERDE   = "\033[92m"
+
+
+def limpar_tela():
+    os.system("cls" if os.name == "nt" else "clear")
+
 
 class Labirinto:
-    def __init__(self, n, num_paredes): 
-        # n = tamanho do mapa, num_paredes = quantidade de paredes a serem colocadas definidas pelo usuário
+    def __init__(self, n, num_paredes):
         self.n = n
-        self.origem = (0, 0)
+        self.origem  = (0, 0)
         self.destino = (n - 1, n - 1)
-        self.matriz = self._gerar_matriz_base(num_paredes)
+        self.matriz  = self._gerar_matriz(num_paredes)
 
-    def _gerar_matriz_base(self, num_paredes):
+    def _gerar_matriz(self, num_paredes):
         """
-        Gera a matriz n x n. 
-        0 = Grama (Custo 1)
-        5 = Lama (Custo 5)
-        1 = Parede (Intransponível)
+        Monta o grid com grama (0, custo 1) e lama (5, custo 5) distribuídos
+        aleatoriamente, depois insere as paredes (1) em posições livres.
         """
         matriz = [[random.choice([0, 5]) for _ in range(self.n)] for _ in range(self.n)]
-        # Coloca os obstáculos 0 (grama) e 5 (lama) aleatoriamente, para definir a dificuldade do mapa.
-        paredes_colocadas = 0
+
+        colocadas  = 0
         tentativas = 0
-        while paredes_colocadas < num_paredes and tentativas < (self.n * self.n): 
-            r, c = random.randint(0, self.n - 1), random.randint(0, self.n - 1)
-            if (r, c) != self.origem and (r, c) != self.destino and matriz[r][c] != 1:
-                matriz[r][c] = 1 # Coloca uma parede
-                paredes_colocadas += 1 # Conta até que se alcance o número inserido de paredes
+        limite     = self.n * self.n
+
+        while colocadas < num_paredes and tentativas < limite:
+            r = random.randint(0, self.n - 1)
+            c = random.randint(0, self.n - 1)
+            eh_ponto_fixo = (r, c) == self.origem or (r, c) == self.destino
+            if not eh_ponto_fixo and matriz[r][c] != 1:
+                matriz[r][c] = 1
+                colocadas += 1
             tentativas += 1
-        
-        # Garante que os pontos A e B sejam "passáveis"
-        matriz[self.origem[0]][self.origem[1]] = 0
+
+        # Garante que início e fim sejam sempre acessíveis
+        matriz[self.origem[0]][self.origem[1]]  = 0
         matriz[self.destino[0]][self.destino[1]] = 0
         return matriz
 
-    def visualizar(self, caminho=None, titulo="Mapa"): 
-        # Visualiza o labirinto no console, destacando o caminho encontrado (se houver) e os obstáculos.
-        caminho_set = set(caminho) if caminho else set()
+    def visualizar(self, caminho=None, visitados=None, titulo="Mapa"):
+        """
+        Imprime o labirinto no terminal com cores:
+          - A / B em vermelho
+          - caminho percorrido em azul
+          - visitados (durante busca) em cinza
+          - paredes, grama e lama com seus símbolos habituais
+        """
+        caminho_set  = set(caminho)  if caminho   else set()
+        visitados_set = set(visitados) if visitados else set()
+
         print(f"\n--- {titulo} ---")
+
         for r in range(self.n):
             linha = ""
             for c in range(self.n):
                 pos = (r, c)
                 val = self.matriz[r][c]
-                if pos == self.origem: linha += " A "
-                elif pos == self.destino: linha += " B "
-                elif pos in caminho_set: linha += " o "
-                elif val == 1: linha += " | "
-                elif val == 5: linha += " ^ "
-                else: linha += " _ "
+
+                if pos == self.origem:
+                    linha += f"{VERMELHO} A {RESET}"
+                elif pos == self.destino:
+                    linha += f"{VERMELHO} B {RESET}"
+                elif pos in caminho_set:
+                    linha += f"{AZUL} o {RESET}"
+                elif pos in visitados_set:
+                    linha += f"{CINZA} * {RESET}"
+                elif val == 1:
+                    linha += " | "
+                elif val == 5:
+                    linha += f"{AMARELO} ^ {RESET}"
+                else:
+                    linha += " _ "
+
             print(linha)
-        print("Legenda: A (Início), B (Fim), | (Parede), ^ (Lama/Custo 5), _ (Grama/Custo 1), o (Caminho)")
 
-    def obter_sucessores(self, pos):
-        # Posicionamento atual e retorna os sucessores válidos
+        print(
+            f"Legenda: {VERMELHO}A/B{RESET} Início/Fim  "
+            f"{AZUL}o{RESET} Caminho  "
+            f"{CINZA}*{RESET} Visitado  "
+            f"| Parede  "
+            f"{AMARELO}^{RESET} Lama(5)  "
+            f"_ Grama(1)"
+        )
+
+    def obter_vizinhos(self, pos):
+        """Retorna as posições adjacentes que não sejam paredes."""
         r, c = pos
-        sucessores = []
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        direcoes = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        vizinhos = []
+        for dr, dc in direcoes:
             nr, nc = r + dr, c + dc
-            if 0 <= nr < self.n and 0 <= nc < self.n and self.matriz[nr][nc] != 1:
-                sucessores.append((nr, nc))
-        return sucessores
+            dentro_do_grid = 0 <= nr < self.n and 0 <= nc < self.n
+            if dentro_do_grid and self.matriz[nr][nc] != 1:
+                vizinhos.append((nr, nc))
+        return vizinhos
 
-# --- Algoritmos de Busca ---
+
+# ---------------------------------------------------------------------------
+# Animação separada da execução
+# ---------------------------------------------------------------------------
+
+def reproduzir_animacao(labirinto, historico_visitados, caminho, titulo, delay=0.05):
+    """
+    Recebe o histórico de nós visitados gravado durante a busca e
+    reproduz frame a frame — completamente desacoplado do tempo medido.
+    """
+    visitados_ate_agora = []
+    for no in historico_visitados:
+        visitados_ate_agora.append(no)
+        limpar_tela()
+        labirinto.visualizar(visitados=visitados_ate_agora, titulo=f"{titulo} — explorando...")
+        time.sleep(delay)
+
+    # Frame final: mostra o caminho encontrado sobre os visitados
+    limpar_tela()
+    labirinto.visualizar(caminho=caminho, visitados=visitados_ate_agora, titulo=f"{titulo} — concluído!")
+
+
+# ---------------------------------------------------------------------------
+# Algoritmos de busca  (retornam também o histórico para a animação)
+# ---------------------------------------------------------------------------
 
 def busca_largura(labirinto):
-    # Visualiza todos os caminhos possíveis simultaneamente
-    inicio_t = time.time()
-    fronteira = [labirinto.origem] 
-    visitados = {labirinto.origem: None}
-    nos_expandidos = 0
+    """
+    BFS clássico — explora camada por camada (FIFO).
+    Garante o menor número de passos, mas ignora o custo do terreno.
+    O tempo é medido aqui dentro, sem nenhum sleep ou print.
+    """
+    inicio_t  = time.time()
+    fronteira = [labirinto.origem]
+    pais      = {labirinto.origem: None}
+    historico = []   # ordem em que os nós foram expandidos
 
     while fronteira:
-        # FIFO: pop(0) para remover o primeiro elemento da lista
-        no_atual = fronteira.pop(0) 
-        nos_expandidos += 1
+        no_atual = fronteira.pop(0)
+        historico.append(no_atual)
 
-        # Teste de objetivo
         if no_atual == labirinto.destino:
             tempo_ms = (time.time() - inicio_t) * 1000
-            return reconstruir_caminho(visitados, no_atual), nos_expandidos, tempo_ms
+            return reconstruir_caminho(pais, no_atual), len(historico), tempo_ms, historico
 
-        # Expansão
-        for sucessor in labirinto.obter_sucessores(no_atual):
-            if sucessor not in visitados:
-                visitados[sucessor] = no_atual
-                fronteira.append(sucessor)
-    
-    return None, nos_expandidos, 0
+        for vizinho in labirinto.obter_vizinhos(no_atual):
+            if vizinho not in pais:
+                pais[vizinho] = no_atual
+                fronteira.append(vizinho)
+
+    return None, len(historico), tempo_ms, historico
+
 
 def busca_profundidade(labirinto):
-    # Escolhe um caminho e segue "reto toda vida" até chegar a um beco sem saída, então volta e tenta de novo
-    inicio_t = time.time()
-    fronteira = [labirinto.origem] # LIFO para DFS
-    visitados = {labirinto.origem: None}
-    nos_expandidos = 0
+    """
+    DFS — mergulha fundo em um ramo antes de tentar outro (LIFO).
+    Rápido em mapas simples, mas pode encontrar caminhos bem tortos.
+    """
+    inicio_t  = time.time()
+    fronteira = [labirinto.origem]
+    pais      = {labirinto.origem: None}
+    historico = []
 
     while fronteira:
         no_atual = fronteira.pop()
-        nos_expandidos += 1
+        historico.append(no_atual)
 
-        # Teste de objetivo
         if no_atual == labirinto.destino:
             tempo_ms = (time.time() - inicio_t) * 1000
-            return reconstruir_caminho(visitados, no_atual), nos_expandidos, tempo_ms
+            return reconstruir_caminho(pais, no_atual), len(historico), tempo_ms, historico
 
-        # Expansão
-        for sucessor in labirinto.obter_sucessores(no_atual):
-            if sucessor not in visitados:
-                visitados[sucessor] = no_atual
-                fronteira.append(sucessor)
-                
-    return None, nos_expandidos, 0
+        for vizinho in labirinto.obter_vizinhos(no_atual):
+            if vizinho not in pais:
+                pais[vizinho] = no_atual
+                fronteira.append(vizinho)
+
+    return None, len(historico), tempo_ms, historico
+
 
 def busca_gulosa(labirinto):
-    inicio_t = time.time()
-    # A fila de prioridade armazena: (valor_da_heuristica, no_atual)
-    # A Gulosa expande sempre o nó com a menor HEURÍSTICA.
-    # Ela ignora o custo do terreno (lama/grama) já percorrido.
-    # O heapq sempre retira o que tiver o menor valor de prioridade primeiro
+    """
+    Greedy Best-First — sempre avança em direção ao destino usando só a
+    heurística de Manhattan. Ignora o custo real já acumulado.
+    """
+    inicio_t  = time.time()
     fronteira = []
     heapq.heappush(fronteira, (heuristica(labirinto.origem, labirinto.destino), labirinto.origem))
-    
-    visitados = {labirinto.origem: None}
-    nos_expandidos = 0
+    pais      = {labirinto.origem: None}
+    historico = []
 
     while fronteira:
-        # O '_' ignora o valor da heurística, pegamos apenas a posição do nó
         _, no_atual = heapq.heappop(fronteira)
-        nos_expandidos += 1
+        historico.append(no_atual)
 
         if no_atual == labirinto.destino:
             tempo_ms = (time.time() - inicio_t) * 1000
-            return reconstruir_caminho(visitados, no_atual), nos_expandidos, tempo_ms
+            return reconstruir_caminho(pais, no_atual), len(historico), tempo_ms, historico
 
-        for sucessor in labirinto.obter_sucessores(no_atual):
-            if sucessor not in visitados:
-                visitados[sucessor] = no_atual
-                prioridade = heuristica(sucessor, labirinto.destino)
-                heapq.heappush(fronteira, (prioridade, sucessor))
-                
-    return None, nos_expandidos, 0
+        for vizinho in labirinto.obter_vizinhos(no_atual):
+            if vizinho not in pais:
+                pais[vizinho] = no_atual
+                prioridade    = heuristica(vizinho, labirinto.destino)
+                heapq.heappush(fronteira, (prioridade, vizinho))
+
+    return None, len(historico), tempo_ms, historico
+
 
 def busca_a_estrela(labirinto):
-    inicio_t = time.time()
-    # A fila de prioridade armazena: (f_score, no_atual)
-    # f(n) = g(n) + h(n)
-    # g(n): Custo real acumulado do ponto de partida até aqui.
-    # h(n): Estimativa (heurística) daqui até o objetivo.
-    fronteira = []
-    # No início, g é 0, então f = h
+    """
+    A* — combina custo real g(n) com estimativa h(n).
+    É o único dos quatro que leva em conta tanto o peso do terreno
+    quanto a distância até o destino, achando o caminho de menor custo.
+    """
+    inicio_t  = time.time()
     h_inicial = heuristica(labirinto.origem, labirinto.destino)
+    fronteira = []
     heapq.heappush(fronteira, (h_inicial, labirinto.origem))
-    
-    visitados = {labirinto.origem: None}
-    # g_score armazena o custo real acumulado para chegar em cada nó
-    g_score = {labirinto.origem: 0}
-    nos_expandidos = 0
+
+    pais      = {labirinto.origem: None}
+    g_score   = {labirinto.origem: 0}
+    historico = []
 
     while fronteira:
         _, no_atual = heapq.heappop(fronteira)
-        nos_expandidos += 1
+        historico.append(no_atual)
 
         if no_atual == labirinto.destino:
             tempo_ms = (time.time() - inicio_t) * 1000
-            return reconstruir_caminho(visitados, no_atual), nos_expandidos, tempo_ms
+            return reconstruir_caminho(pais, no_atual), len(historico), tempo_ms, historico
 
-        for sucessor in labirinto.obter_sucessores(no_atual):
-            # Calcula o custo real somando o peso do terreno definido no mapa.
-            #Foi definido: 5 para lama, senão 1 (grama)
-            custo_terreno = 5 if labirinto.matriz[sucessor[0]][sucessor[1]] == 5 else 1
-            novo_g = g_score[no_atual] + custo_terreno
-            
-            # O A* só atualiza o caminho se encontrar uma rota MAIS BARATA (menor g).
-            if sucessor not in g_score or novo_g < g_score[sucessor]:
-                g_score[sucessor] = novo_g
-                visitados[sucessor] = no_atual
-                f_score = novo_g + heuristica(sucessor, labirinto.destino)
-                heapq.heappush(fronteira, (f_score, sucessor))
-                
-    return None, nos_expandidos, 0
+        for vizinho in labirinto.obter_vizinhos(no_atual):
+            custo_terreno = 5 if labirinto.matriz[vizinho[0]][vizinho[1]] == 5 else 1
+            novo_g        = g_score[no_atual] + custo_terreno
+
+            if vizinho not in g_score or novo_g < g_score[vizinho]:
+                g_score[vizinho] = novo_g
+                pais[vizinho]    = no_atual
+                f_score          = novo_g + heuristica(vizinho, labirinto.destino)
+                heapq.heappush(fronteira, (f_score, vizinho))
+
+    return None, len(historico), tempo_ms, historico
 
 
-# --- Utilitários de Análise ---
+# ---------------------------------------------------------------------------
+# Funções auxiliares
+# ---------------------------------------------------------------------------
 
 def heuristica(a, b):
-    # Calcula a distância de Manhattan entre o ponto 'a' e o ponto 'b'
-    # é permitido apenas em 4 direções (cima, baixo, esquerda, direita).
-    (x1, y1) = a
-    (x2, y2) = b
-    return abs(x1 - x2) + abs(y1 - y2)
+    """Distância de Manhattan entre dois pontos num grid de 4 direções."""
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-def reconstruir_caminho(parentes, atual):
-    # Volta e tenta de novo da busca_profundidade 
+
+def reconstruir_caminho(pais, atual):
+    """Segue os ponteiros de pai em pai até chegar na origem e inverte a lista."""
     caminho = []
     while atual is not None:
         caminho.append(atual)
-        atual = parentes[atual]
+        atual = pais[atual]
     return caminho[::-1]
 
+
 def calcular_custo(labirinto, caminho):
-    # Verifica cada posição encontrada e soma o custo conforme os obstáculos ou caminho livre
-    if not caminho: return float('inf')
-    # Custo 1 para grama (0) e custo 5 para lama (5)
+    if not caminho:
+        return float("inf")
     return sum(5 if labirinto.matriz[r][c] == 5 else 1 for r, c in caminho)
 
-def exibir_melhor_caminho(resultados):
-    # Compara e exibe o melhor 
+
+def exibir_comparativo(resultados):
     if not resultados:
-        print("\nNenhum caminho foi encontrado por nenhum algoritmo.")
+        print("\nNenhum algoritmo encontrou um caminho.")
         return
 
-    print("\n" + "="*60)
-    print(f"{'Algoritmo':<20} | {'Custo':<10} | {'Nós Exp.':<10} | {'Tempo (ms)':<10}")
-    print("-" * 60)
-    
-    melhor_nome = None
-    menor_custo = float('inf')
+    print("\n" + "=" * 62)
+    print(f"{'Algoritmo':<22} | {'Custo':^8} | {'Nós Exp.':^10} | {'Tempo (ms)':^10}")
+    print("-" * 62)
+
+    melhor_nome  = None
+    menor_custo  = float("inf")
 
     for nome, info in resultados.items():
-        print(f"{nome:<20} | {info['custo']:<10} | {info['expandidos']:<10} | {info['tempo']:<10.4f}")
-        
-        # Critério: Menor custo total, desempate por menor número de nós expandidos
-        if info['custo'] < menor_custo:
-            menor_custo = info['custo']
+        print(
+            f"{nome:<22} | {info['custo']:^8} | {info['expandidos']:^10} | {info['tempo']:^10.3f}"
+        )
+        if info["custo"] < menor_custo:
+            menor_custo = info["custo"]
             melhor_nome = nome
-        elif info['custo'] == menor_custo:
-            if melhor_nome and info['expandidos'] < resultados[melhor_nome]['expandidos']:
+        elif info["custo"] == menor_custo and melhor_nome:
+            if info["expandidos"] < resultados[melhor_nome]["expandidos"]:
                 melhor_nome = nome
 
-    print("="*60)
-    print(f"MELHOR ESTRATÉGIA: {melhor_nome}")
-    print("="*60)
+    print("=" * 62)
+    print(f"{VERDE}MELHOR ESTRATÉGIA: {melhor_nome}{RESET}")
+    print("=" * 62)
 
-# --- Execução Principal ---
+
+# ---------------------------------------------------------------------------
+# Execução principal
+# ---------------------------------------------------------------------------
 
 def main():
-    print("=== SISTEMA DE RESOLUÇÃO DE LABIRINTOS ===")
+    limpar_tela()
+    print("=== SISTEMA DE RESOLUÇÃO DE LABIRINTOS ===\n")
+
     try:
-        n = int(input("Informe o tamanho N do mapa: "))
-        p = int(input("Informe a quantidade de paredes: "))
+        n = int(input("Tamanho N do mapa (ex: 10): "))
+        p = int(input("Quantidade de paredes:      "))
     except ValueError:
-        print("Entrada inválida. Use apenas números inteiros.")
+        print("Entrada inválida — use apenas números inteiros.")
         return
 
     lab = Labirinto(n, p)
-    lab.visualizar(titulo="LABIRINTO INICIAL")
 
-    historico_resultados = {}
+    limpar_tela()
+    lab.visualizar(titulo="LABIRINTO INICIAL")
+    input("\nPressione Enter para iniciar as buscas...")
 
     estrategias = [
-        ("Busca em Largura", busca_largura),
+        ("Busca em Largura",     busca_largura),
         ("Busca em Profundidade", busca_profundidade),
-        ("Busca Gulosa", busca_gulosa),
-        ("Busca A*", busca_a_estrela)
+        ("Busca Gulosa",          busca_gulosa),
+        ("Busca A*",              busca_a_estrela),
     ]
 
+    historico = {}
+
     for nome, algoritmo in estrategias:
-        print(f"\nCalculando {nome}...")
-        caminho, expandidos, tempo = algoritmo(lab)
-        
+        limpar_tela()
+        print(f"Executando (sem animação): {nome}...")
+
+        # 1) Roda o algoritmo puro — tempo medido aqui, sem sleep ou print
+        caminho, expandidos, tempo, hist_visitados = algoritmo(lab)
+
         if caminho:
             custo = calcular_custo(lab, caminho)
-            historico_resultados[nome] = {
-                'custo': custo,
-                'expandidos': expandidos,
-                'tempo': tempo
-            }
-            lab.visualizar(caminho, titulo=f"RESULTADO: {nome}")
-            print(f"Custo Total: {custo} | Nós Expandidos: {expandidos} | Tempo: {tempo:.4f} ms")
-        else:
-            print(f"O algoritmo {nome} não encontrou saída.")
+            historico[nome] = {"custo": custo, "expandidos": expandidos, "tempo": tempo}
 
-    exibir_melhor_caminho(historico_resultados)
+            # 2) Só depois de ter o tempo, reproduz a animação
+            reproduzir_animacao(lab, hist_visitados, caminho, titulo=nome)
+            print(f"\nCusto: {custo}  |  Nós expandidos: {expandidos}  |  Tempo real: {tempo:.4f} ms")
+        else:
+            limpar_tela()
+            lab.visualizar(titulo=f"{nome} — sem saída")
+            print(f"\n{nome}: não encontrou nenhum caminho possível.")
+
+        input("\nPressione Enter para continuar...")
+
+    limpar_tela()
+    exibir_comparativo(historico)
+
 
 if __name__ == "__main__":
     main()
-    #print(heuristica((0,0), (3,3)))
